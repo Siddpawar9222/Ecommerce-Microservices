@@ -1,0 +1,147 @@
+version: '3.1'
+
+services:
+    zookeeper:
+      image: confluentinc/cp-zookeeper:7.0.1
+      container_name: zookeeper
+      ports:
+        - "2181:2181"
+      environment:
+        ZOOKEEPER_CLIENT_PORT: 2181
+        ZOOKEEPER_TICK_TIME: 2000
+
+    broker:
+      image: confluentinc/cp-kafka:7.0.1
+      container_name: broker
+      ports:
+        - "9092:9092"
+      depends_on:
+        - zookeeper
+      environment:
+        KAFKA_BROKER_ID: 1
+        KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+        KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://broker:29092
+        KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+        KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+
+  # zipkin
+    zipkin:
+      image: openzipkin/zipkin
+      container_name: zipkin
+      ports:
+        - "9411:9411"
+      networks:
+        - test
+
+
+  #Eureka Server
+    discovery-server:
+      image: discovery-server:3.0
+      container_name: discovery-server
+      ports:
+        - "8761:8761"
+      networks:
+        - test
+      depends_on:
+        - zipkin
+      # environment:
+      #  EUREKA.INSTANCE.HOSTNAME: discovery-server
+
+    identity-service:
+        image: identity-service:3.0
+        container_name: identity-service
+        ports:
+          - "8091:8091"
+        networks:
+          - test
+        depends_on:
+          - discovery-server
+          - zipkin
+        environment:
+          ZIPKIN_SERVER : zipkin
+          EUREKA_SERVER : discovery-server
+
+
+    api-gateway:
+      image: api-gateway:3.0
+      container_name: api-gateway
+      ports:
+        - "8765:8765"
+      networks:
+        - test
+      environment:
+          DISCOVERY_SERVER : discovery-server
+          ZIPKIN_SERVER : zipkin
+          EUREKA_SERVER : discovery-server
+      depends_on:
+        - zipkin
+        - discovery-server
+
+    product-service:
+      image: product-service:3.0
+      container_name: product-service
+      ports:
+        - "8080:8080"
+      networks:
+        - test
+      depends_on:
+        - discovery-server
+        - zipkin
+        - api-gateway
+      environment:
+         ZIPKIN_SERVER : zipkin
+         EUREKA_SERVER : discovery-server
+
+    order-service:
+      image: order-service:3.0
+      container_name: order-service
+      ports:
+        - "8081:8081"
+      networks:
+        - test
+      depends_on:
+        - discovery-server
+        - zipkin
+        - api-gateway
+      environment:
+        ZIPKIN_SERVER : zipkin
+        EUREKA_SERVER : discovery-server
+        KAFKA_SERVER : broker
+
+    inventory-service:
+      image: inventory-service:3.0
+      container_name: inventory-service
+      ports:
+        - "8082:8082"
+      networks:
+        - test
+      depends_on:
+        - discovery-server
+        - zipkin
+        - api-gateway
+      environment:
+        ZIPKIN_SERVER : zipkin
+        EUREKA_SERVER : discovery-server
+
+    notification-service:
+      image: notification-service:3.0
+      container_name: notification-service
+      ports:
+        - "8090:8090"
+      networks:
+        - test
+      depends_on:
+        - discovery-server
+        - zipkin
+        - broker
+      environment:
+        EUREKA_SERVER : discovery-server
+        ZIPKIN_SERVER : zipkin
+        KAFKA_SERVER : broker
+
+
+networks:
+   test:
